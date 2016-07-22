@@ -10,7 +10,7 @@ import (
 	"net/url"
 )
 
-const LOGIN_URL string = "http://oauth.vk.com/authorize"
+const login_url string = "http://oauth.vk.com/authorize"
 
 type AuthInfo struct{
 	Access_token string
@@ -71,7 +71,7 @@ func give_access(doc *goquery.Document, session *grequests.Session) (*grequests.
 func Authenticate(login, password string, client_id int, scope *[]string) (*AuthInfo, error) {
 	session := grequests.NewSession(nil)
 
-	response, err := session.Get(LOGIN_URL, &grequests.RequestOptions{Params: build_login_params(client_id, scope)})
+	response, err := session.Get(login_url, &grequests.RequestOptions{Params: build_login_params(client_id, scope)})
 	if err != nil {
 		return nil, err
 	}

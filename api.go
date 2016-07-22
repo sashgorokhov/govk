@@ -5,8 +5,8 @@ import (
 	"github.com/levigross/grequests"
 )
 
-const DEFAULT_VERSION string = "5.50"
-const BASE_API_URL string = "https://api.vk.com/method/"
+const default_version string = "5.50"
+const base_api_url string = "https://api.vk.com/method/"
 
 type Api struct {
 	Version string
@@ -15,7 +15,7 @@ type Api struct {
 
 
 func NewApi(access_token string) (*Api) {
-	return &Api{Version: DEFAULT_VERSION, Access_token: access_token}
+	return &Api{Version: default_version, Access_token: access_token}
 }
 
 func (a *Api) Call (method string, params map[string]string) (*gabs.Container, error) {
@@ -28,7 +28,7 @@ func (a *Api) Call (method string, params map[string]string) (*gabs.Container, e
 	}
 
 	request_options := grequests.RequestOptions{Params:params}
-	url := BASE_API_URL + method
+	url := base_api_url + method
 
 	response, err := grequests.Get(url, &request_options)
 	if err != nil {
