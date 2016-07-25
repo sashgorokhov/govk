@@ -102,19 +102,21 @@ func Authenticate(login, password string, client_id int, scope *[]string) (*Auth
 	}
 
 
-	if response.RawResponse.Request.URL.Path == "/blank.html" {
-		query, err := url.ParseQuery(response.RawResponse.Request.URL.Fragment)
-		if err != nil {
-			return nil, errors.New(fmt.Sprintf("Error parsing query: %s\nUrl: %s", err, response.RawResponse.Request.URL))
-		}
-		user_id, _ := strconv.Atoi(query.Get("user_id"))
-		expires_in, _ := strconv.Atoi(query.Get("expires_in"))
-		return &AuthInfo{
-			Access_token: query.Get("access_token"),
-			User_id: user_id,
-			Expires_in: expires_in,
-		}, nil
+	if response.RawResponse.Request.URL.Path != "/blank.html" {
+		return nil, errors.New("Something went wrong")
+		
 	}
-
-	return nil, errors.New("Something went wrong")
+	
+	query, err := url.ParseQuery(response.RawResponse.Request.URL.Fragment)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Error parsing query: %s\nUrl: %s", err, response.RawResponse.Request.URL))
+	}
+	user_id, _ := strconv.Atoi(query.Get("user_id"))
+	expires_in, _ := strconv.Atoi(query.Get("expires_in"))
+	return &AuthInfo{
+		Access_token: query.Get("access_token"),
+		User_id: user_id,
+		Expires_in: expires_in,
+	}, nil
+	
 }
