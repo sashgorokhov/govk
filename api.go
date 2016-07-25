@@ -3,7 +3,6 @@ package govk
 import (
 	"github.com/Jeffail/gabs"
 	"github.com/levigross/grequests"
-	"log"
 )
 
 const default_version string = "5.50"
