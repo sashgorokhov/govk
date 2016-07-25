@@ -49,7 +49,6 @@ func (a *Api) AbstractRequest (method string, params map[string]string) (*gabs.C
 
 func (a *Api) StructRequest (method string, params map[string]string, user_struct interface{}) (error) {
 	response, err := a.RawRequest(method, params)
-	log.Println(response)
 	if err != nil {
 		return err
 	}
