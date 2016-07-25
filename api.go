@@ -3,6 +3,7 @@ package govk
 import (
 	"github.com/Jeffail/gabs"
 	"github.com/levigross/grequests"
+	"log"
 )
 
 const default_version string = "5.50"
@@ -18,21 +19,40 @@ func NewApi(access_token string) (*Api) {
 	return &Api{Version: default_version, Access_token: access_token}
 }
 
-func (a *Api) Call (method string, params map[string]string) (*gabs.Container, error) {
+
+func (a *Api) prepare_params (params map[string]string) *grequests.RequestOptions {
 	if params == nil {
-		params = map[string]string{}
+		params = make(map[string]string)
 	}
 	params["v"] = a.Version
 	if a.Access_token != "" {
 		params["access_token"] = a.Access_token
 	}
 
-	request_options := grequests.RequestOptions{Params:params}
-	url := base_api_url + method
+	return &grequests.RequestOptions{Params:params}
+}
 
-	response, err := grequests.Get(url, &request_options)
+func (a *Api) RawRequest(method string, params map[string]string) (*grequests.Response, error) {
+	url := base_api_url + method
+	return grequests.Get(url, a.prepare_params(params))
+}
+
+
+func (a *Api) AbstractRequest (method string, params map[string]string) (*gabs.Container, error) {
+	response, err := a.RawRequest(method, params)
 	if err != nil {
 		return nil, err
 	}
 	return gabs.ParseJSONBuffer(response.RawResponse.Body)
+}
+
+
+func (a *Api) StructRequest (method string, params map[string]string, user_struct interface{}) (error) {
+	response, err := a.RawRequest(method, params)
+	log.Println(response)
+	if err != nil {
+		return err
+	}
+	response.JSON(user_struct)
+	return nil
 }
