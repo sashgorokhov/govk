@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"errors"
 	"net/url"
+	"io/ioutil"
+	"bytes"
 )
 
 const login_url string = "http://oauth.vk.com/authorize"
@@ -45,21 +47,22 @@ func process_form(form *goquery.Selection, query map[string]string, session *gre
 	return session.Post(action, &grequests.RequestOptions{Params:query})
 }
 
-func auth_user(login, password string, doc *goquery.Document, session *grequests.Session) (*grequests.Response, error) {
+func auth_user(login, password string, doc *goquery.Document, session *grequests.Session) (*grequests.Response, []byte, error) {
 	form := doc.Find("form")
 	response, err := process_form(form, map[string]string{"email": login, "pass": password}, session)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	doc, err = goquery.NewDocumentFromResponse(response.RawResponse)
+	buf, err := ioutil.ReadAll(response.RawResponse.Body)
+	doc, err = goquery.NewDocumentFromReader(bytes.NewBuffer(buf))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	warning := doc.Find(".service_msg_warning")
 	if warning.Length() > 0 {
-		return nil, errors.New(fmt.Sprintf("Invalid credentials: %s %s\n%s", login, password, warning.Next().Text()))
+		return nil, nil, errors.New(fmt.Sprintf("Invalid credentials: %s %s\n%s", login, password, warning.Next().Text()))
 	}
-	return response, nil
+	return response, buf, nil
 }
 
 func give_access(doc *goquery.Document, session *grequests.Session) (*grequests.Response, error) {
@@ -75,23 +78,23 @@ func Authenticate(login, password string, client_id int, scope *[]string) (*Auth
 	if err != nil {
 		return nil, err
 	}
+	buf, err := ioutil.ReadAll(response.RawResponse.Body)
 
-	doc, err := goquery.NewDocumentFromResponse(response.RawResponse)
-
+	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(buf))
 	if err != nil {
 		return nil, err
 	}
 
 	s := doc.Find("input[name='pass']")
 	if s.Length() > 0 {
-		response, err = auth_user(login, password, doc, session)
+		response, buf, err = auth_user(login, password, doc, session)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if response.RawResponse.Request.URL.Path != "/blank.html" {
-		doc, err = goquery.NewDocumentFromResponse(response.RawResponse)
+		doc, err = goquery.NewDocumentFromReader(bytes.NewBuffer(buf))
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +103,6 @@ func Authenticate(login, password string, client_id int, scope *[]string) (*Auth
 			return nil, err
 		}
 	}
-
 
 	if response.RawResponse.Request.URL.Path != "/blank.html" {
 		return nil, errors.New("Something went wrong")
