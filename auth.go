@@ -12,7 +12,7 @@ import (
 	"bytes"
 )
 
-const login_url string = "http://oauth.vk.com/authorize"
+const Login_url string = "http://oauth.vk.com/authorize"
 
 type AuthInfo struct{
 	Access_token string
@@ -20,7 +20,7 @@ type AuthInfo struct{
 	Expires_in   int
 }
 
-func build_login_params(client_id int, scope *[]string) map[string]string {
+func Build_login_params(client_id int, scope *[]string) map[string]string {
 	return map[string]string {
 		"display" : "mobile",
 		"redirect_uri" : "http://oauth.vk.com/blank.html",
@@ -28,6 +28,21 @@ func build_login_params(client_id int, scope *[]string) map[string]string {
 		"client_id" : strconv.Itoa(client_id),
 		"scope" : strings.Join(*scope,","),
 	}
+}
+
+func BuildLoginUrl(client_id int, scope *[]string) string {
+	params := Build_login_params(client_id, scope)
+	login_url, err := url.Parse(Login_url)
+	if err != nil {
+		return err.Error()
+	}
+	q := login_url.Query()
+	for key, value := range params {
+		q.Set(key, value)
+	}
+
+	return login_url.String() + "?" + q.Encode()
+
 }
 
 func process_form(form *goquery.Selection, query map[string]string, session *grequests.Session) (*grequests.Response, error) {
@@ -70,11 +85,10 @@ func give_access(doc *goquery.Document, session *grequests.Session) (*grequests.
 	return process_form(form, nil, session)
 }
 
-
 func Authenticate(login, password string, client_id int, scope *[]string) (*AuthInfo, error) {
 	session := grequests.NewSession(nil)
 
-	response, err := session.Get(login_url, &grequests.RequestOptions{Params: build_login_params(client_id, scope)})
+	response, err := session.Get(Login_url, &grequests.RequestOptions{Params: Build_login_params(client_id, scope)})
 	if err != nil {
 		return nil, err
 	}
