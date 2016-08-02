@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"io/ioutil"
 	"bytes"
+	"log"
 )
 
 const Login_url string = "http://oauth.vk.com/authorize"
@@ -18,6 +19,27 @@ type AuthInfo struct{
 	Access_token string
 	User_id      int
 	Expires_in   int
+}
+
+type BufferedResponse struct {
+	Response *grequests.Response
+	Bytes    []byte
+}
+
+func CreateBufferedResponse(response *grequests.Response) (*BufferedResponse, error) {
+	buf, err := ioutil.ReadAll(response.RawResponse.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &BufferedResponse{Response:response, Bytes:buf}, nil
+}
+
+func (r *BufferedResponse) NewBuffer() *bytes.Buffer {
+	return bytes.NewBuffer(r.Bytes)
+}
+
+func (r *BufferedResponse) GetDocument () (*goquery.Document, error) {
+	return goquery.NewDocumentFromReader(r.NewBuffer())
 }
 
 func Build_login_params(client_id int, scope *[]string) map[string]string {
@@ -45,8 +67,12 @@ func BuildLoginUrl(client_id int, scope *[]string) string {
 
 }
 
-func process_form(form *goquery.Selection, query map[string]string, session *grequests.Session) (*grequests.Response, error) {
+func process_form(form *goquery.Selection, query map[string]string, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
 	action, _ := form.Attr("action")
+	if strings.HasPrefix(action, "/") {
+		url := last_response.Response.RawResponse.Request.URL
+		action = url.Scheme + "://" + url.Host + action
+	}
 	if query == nil {
 		query = map[string]string{}
 	}
@@ -59,73 +85,114 @@ func process_form(form *goquery.Selection, query map[string]string, session *gre
 		}
 		query[name] = value
 	})
-	return session.Post(action, &grequests.RequestOptions{Params:query})
+	response, err := session.Post(action, &grequests.RequestOptions{Data:query})
+	if err != nil {
+		return nil, err
+	}
+	return CreateBufferedResponse(response)
 }
 
-func auth_user(login, password string, doc *goquery.Document, session *grequests.Session) (*grequests.Response, []byte, error) {
+func auth_user(login, password string, doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
 	form := doc.Find("form")
-	response, err := process_form(form, map[string]string{"email": login, "pass": password}, session)
+	buffered_response, err := process_form(form, map[string]string{"email": login, "pass": password}, session, last_response)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	buf, err := ioutil.ReadAll(response.RawResponse.Body)
-	doc, err = goquery.NewDocumentFromReader(bytes.NewBuffer(buf))
+	doc, err = buffered_response.GetDocument()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	warning := doc.Find(".service_msg_warning")
 	if warning.Length() > 0 {
-		return nil, nil, errors.New(fmt.Sprintf("Invalid credentials: %s %s\n%s", login, password, warning.Next().Text()))
+		log.Println(warning.Children().Next().Text())
+		return nil, errors.New(fmt.Sprintf("Authentication failure (probably invalid login or password): %s", warning.Next().Text()))
 	}
-	return response, buf, nil
+	return buffered_response, nil
 }
 
-func give_access(doc *goquery.Document, session *grequests.Session) (*grequests.Response, error) {
+func process_two_factor_auth(auth_code int, doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
 	form := doc.Find("form")
-	return process_form(form, nil, session)
+	buffered_response, err := process_form(form, map[string]string{"code": strconv.Itoa(auth_code)}, session, last_response)
+	if err != nil {
+		return nil, err
+	}
+	warning := doc.Find(".service_msg_warning")
+	if warning.Length() > 0 {
+		return nil, errors.New(fmt.Sprintf("Two-factor authentication failure: %s", warning.Next().Text()))
+	}
+	return buffered_response, nil
 }
 
-func Authenticate(login, password string, client_id int, scope *[]string) (*AuthInfo, error) {
+func give_access(doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
+	form := doc.Find("form")
+	return process_form(form, nil, session, last_response)
+}
+
+func Authenticate(login, password string, client_id int, scope *[]string, auth_code int) (*AuthInfo, error) {
 	session := grequests.NewSession(nil)
 
+	//Get initial login page
 	response, err := session.Get(Login_url, &grequests.RequestOptions{Params: Build_login_params(client_id, scope)})
 	if err != nil {
 		return nil, err
 	}
-	buf, err := ioutil.ReadAll(response.RawResponse.Body)
-
-	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(buf))
+	buffered_response, err := CreateBufferedResponse(response)
 	if err != nil {
 		return nil, err
 	}
 
+	doc, err := buffered_response.GetDocument()
+	if err != nil {
+		return nil, err
+	}
+
+	//If password field is present, we need to give vk login and password
 	s := doc.Find("input[name='pass']")
 	if s.Length() > 0 {
-		response, buf, err = auth_user(login, password, doc, session)
+		//If login/password incorrect, this will return an error
+		buffered_response, err = auth_user(login, password, doc, session, buffered_response)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if response.RawResponse.Request.URL.Path != "/blank.html" {
-		doc, err = goquery.NewDocumentFromReader(bytes.NewBuffer(buf))
+	//Check if two-factor auth is enabled
+	if buffered_response.Response.RawResponse.Request.URL.Path == "/login" {
+		// Two-factor auth is enabled but no code was given
+		if auth_code == 0 {
+			return nil, errors.New(fmt.Sprintf("Two-factor auth is enabled on account %s but no auth_code was given", login))
+		}
+		doc, err = buffered_response.GetDocument()
 		if err != nil {
 			return nil, err
 		}
-		response, err = give_access(doc, session)
+		// Process two-factor auth
+		buffered_response, err = process_two_factor_auth(auth_code, doc, session, buffered_response)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if response.RawResponse.Request.URL.Path != "/blank.html" {
+	//Check if user granted access for current app
+	if buffered_response.Response.RawResponse.Request.URL.Path == "/authorize" {
+		doc, err = buffered_response.GetDocument()
+		if err != nil {
+			return nil, err
+		}
+		// Just press the button
+		buffered_response, err = give_access(doc, session, buffered_response)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if buffered_response.Response.RawResponse.Request.URL.Path != "/blank.html" {
 		return nil, errors.New("Something went wrong")
-		
 	}
 	
-	query, err := url.ParseQuery(response.RawResponse.Request.URL.Fragment)
+	query, err := url.ParseQuery(buffered_response.Response.RawResponse.Request.URL.Fragment)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error parsing query: %s\nUrl: %s", err, response.RawResponse.Request.URL))
+		return nil, errors.New(fmt.Sprintf("Error parsing query %s -- %s", buffered_response.Response.RawResponse.Request.URL, err))
 	}
 	user_id, _ := strconv.Atoi(query.Get("user_id"))
 	expires_in, _ := strconv.Atoi(query.Get("expires_in"))
