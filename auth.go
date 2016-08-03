@@ -110,9 +110,9 @@ func auth_user(login, password string, doc *goquery.Document, session *grequests
 	return buffered_response, nil
 }
 
-func process_two_factor_auth(auth_code int, doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
+func process_two_factor_auth(auth_code string, doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
 	form := doc.Find("form")
-	buffered_response, err := process_form(form, map[string]string{"code": strconv.Itoa(auth_code)}, session, last_response)
+	buffered_response, err := process_form(form, map[string]string{"code": auth_code}, session, last_response)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func give_access(doc *goquery.Document, session *grequests.Session, last_respons
 	return process_form(form, nil, session, last_response)
 }
 
-func Authenticate(login, password string, client_id int, scope *[]string, auth_code int) (*AuthInfo, error) {
+func Authenticate(login, password string, client_id int, scope *[]string, auth_code string) (*AuthInfo, error) {
 	session := grequests.NewSession(nil)
 
 	//Get initial login page
@@ -159,7 +159,7 @@ func Authenticate(login, password string, client_id int, scope *[]string, auth_c
 	//Check if two-factor auth is enabled
 	if buffered_response.Response.RawResponse.Request.URL.Path == "/login" {
 		// Two-factor auth is enabled but no code was given
-		if auth_code == 0 {
+		if auth_code == "" {
 			return nil, errors.New(fmt.Sprintf("Two-factor auth is enabled on account %s but no auth_code was given", login))
 		}
 		doc, err = buffered_response.GetDocument()
