@@ -13,7 +13,7 @@ import (
 	"log"
 )
 
-const Login_url string = "http://oauth.vk.com/authorize"
+const Login_url string = "https://oauth.vk.com/authorize"
 
 type AuthInfo struct{
 	Access_token string
@@ -45,7 +45,7 @@ func (r *BufferedResponse) GetDocument () (*goquery.Document, error) {
 func Build_login_params(client_id int, scope *[]string) map[string]string {
 	return map[string]string {
 		"display" : "mobile",
-		"redirect_uri" : "http://oauth.vk.com/blank.html",
+		"redirect_uri" : "https://oauth.vk.com/blank.html",
 		"response_type" : "token",
 		"client_id" : strconv.Itoa(client_id),
 		"scope" : strings.Join(*scope,","),

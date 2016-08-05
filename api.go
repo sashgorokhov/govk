@@ -27,7 +27,6 @@ func (a *Api) prepare_params (params map[string]string) *grequests.RequestOption
 	if a.Access_token != "" {
 		params["access_token"] = a.Access_token
 	}
-
 	return &grequests.RequestOptions{Params:params}
 }
 
