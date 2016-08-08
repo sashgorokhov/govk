@@ -11,12 +11,12 @@ import (
 const default_version string = "5.50"
 const base_api_url string = "https://api.vk.com/method/"
 
-var ApiLogger = logrus.Logger{
+var ApiLogger = (&logrus.Logger{
 	Level:     logrus.InfoLevel,
 	Formatter: new(prefixed.TextFormatter),
 	Hooks:     make(logrus.LevelHooks),
 	Out:       ioutil.Discard,
-}.WithField("prefix", "govk.api")
+}).WithField("prefix", "govk.api")
 
 type Api struct {
 	Version      string

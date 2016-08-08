@@ -14,12 +14,12 @@ import (
 	"strings"
 )
 
-var AuthLogger = logrus.Logger{
+var AuthLogger = (&logrus.Logger{
 	Level:     logrus.InfoLevel,
 	Formatter: new(prefixed.TextFormatter),
 	Hooks:     make(logrus.LevelHooks),
 	Out:       ioutil.Discard,
-}.WithField("prefix", "govk.auth")
+}).WithField("prefix", "govk.auth")
 
 const Login_url string = "https://oauth.vk.com/authorize"
 
