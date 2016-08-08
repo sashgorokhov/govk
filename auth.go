@@ -7,6 +7,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/Sirupsen/logrus"
 	"github.com/levigross/grequests"
+	"github.com/x-cray/logrus-prefixed-formatter"
 	"io/ioutil"
 	"net/url"
 	"strconv"
@@ -15,10 +16,10 @@ import (
 
 var AuthLogger = logrus.Logger{
 	Level:     logrus.InfoLevel,
-	Formatter: new(logrus.TextFormatter),
+	Formatter: new(prefixed.TextFormatter),
 	Hooks:     make(logrus.LevelHooks),
 	Out:       ioutil.Discard,
-}
+}.WithField("prefix", "govk.auth")
 
 const Login_url string = "https://oauth.vk.com/authorize"
 

@@ -4,6 +4,7 @@ import (
 	"github.com/Jeffail/gabs"
 	"github.com/Sirupsen/logrus"
 	"github.com/levigross/grequests"
+	"github.com/x-cray/logrus-prefixed-formatter"
 	"io/ioutil"
 )
 
@@ -12,10 +13,10 @@ const base_api_url string = "https://api.vk.com/method/"
 
 var ApiLogger = logrus.Logger{
 	Level:     logrus.InfoLevel,
-	Formatter: new(logrus.TextFormatter),
+	Formatter: new(prefixed.TextFormatter),
 	Hooks:     make(logrus.LevelHooks),
 	Out:       ioutil.Discard,
-}
+}.WithField("prefix", "govk.api")
 
 type Api struct {
 	Version      string
