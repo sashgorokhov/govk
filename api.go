@@ -1,6 +1,8 @@
 package govk
 
 import (
+	"bytes"
+	"encoding/json"
 	"github.com/Jeffail/gabs"
 	"github.com/Sirupsen/logrus"
 	"github.com/levigross/grequests"
@@ -59,13 +61,22 @@ func (a *Api) AbstractRequest(method string, params map[string]string) (*gabs.Co
 	if err != nil {
 		return nil, err
 	}
-	return gabs.ParseJSONBuffer(response.RawResponse.Body)
+	return gabs.ParseJSONBuffer(bytes.NewReader(response.Bytes()))
 }
 
 func (a *Api) StructRequest(method string, params map[string]string, user_struct interface{}) error {
-	response, err := a.RawRequest(method, params)
+	containter, err := a.AbstractRequest(method, params)
 	if err != nil {
 		return err
 	}
-	return response.JSON(user_struct)
+	if containter.ExistsP("error") {
+		var error_struct ErrorResponseStruct
+		err = json.NewDecoder(bytes.NewReader(containter.Bytes())).Decode(&error_struct)
+		if err != nil {
+			return err
+		}
+		return ResponseError{ErrorStruct: error_struct}
+	} else {
+		return json.NewDecoder(bytes.NewReader(containter.Bytes())).Decode(user_struct)
+	}
 }
