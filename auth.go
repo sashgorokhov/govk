@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var AuthLogger = (&logrus.Logger{
@@ -27,6 +28,7 @@ type AuthInfo struct {
 	Access_token string
 	User_id      int
 	Expires_in   int
+	Expires_at   time.Time
 }
 
 type BufferedResponse struct {
@@ -278,10 +280,12 @@ func Authenticate(login, password string, client_id int, scope *[]string, auth_c
 	}
 	user_id, _ := strconv.Atoi(query.Get("user_id"))
 	expires_in, _ := strconv.Atoi(query.Get("expires_in"))
+	expires_at := time.Now().Add(time.Duration(expires_in) * time.Second)
 	return &AuthInfo{
 		Access_token: query.Get("access_token"),
 		User_id:      user_id,
 		Expires_in:   expires_in,
+		Expires_at:   expires_at,
 	}, nil
 
 }
