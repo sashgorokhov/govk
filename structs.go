@@ -15,6 +15,7 @@ type ErrorResponseStruct struct {
 	Error errorStruct `json:"error"`
 }
 
+// ResponseError holds ErrorResponseStruct of api response.
 type ResponseError struct {
 	ErrorStruct ErrorResponseStruct
 }

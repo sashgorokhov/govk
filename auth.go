@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// AuthLogger used during authenticating procedure.
 var AuthLogger = (&logrus.Logger{
 	Level:     logrus.InfoLevel,
 	Formatter: new(prefixed.TextFormatter),
@@ -22,8 +23,9 @@ var AuthLogger = (&logrus.Logger{
 	Out:       ioutil.Discard,
 }).WithField("prefix", "govk.auth")
 
-const Login_url string = "https://oauth.vk.com/authorize"
+const login_url string = "https://oauth.vk.com/authorize"
 
+// AuthInfo is a struct that holds authentication results like access token, user id and expiration time
 type AuthInfo struct {
 	Access_token string
 	User_id      int
@@ -31,28 +33,30 @@ type AuthInfo struct {
 	Expires_at   time.Time
 }
 
-type BufferedResponse struct {
+// bufferedResponse for internal use
+type bufferedResponse struct {
 	Response *grequests.Response
 	Bytes    []byte
 }
 
-func CreateBufferedResponse(response *grequests.Response) (*BufferedResponse, error) {
+func createBufferedResponse(response *grequests.Response) (*bufferedResponse, error) {
 	buf, err := ioutil.ReadAll(response.RawResponse.Body)
 	if err != nil {
 		return nil, err
 	}
-	return &BufferedResponse{Response: response, Bytes: buf}, nil
+	return &bufferedResponse{Response: response, Bytes: buf}, nil
 }
 
-func (r *BufferedResponse) NewBuffer() *bytes.Buffer {
+func (r *bufferedResponse) NewBuffer() *bytes.Buffer {
 	return bytes.NewBuffer(r.Bytes)
 }
 
-func (r *BufferedResponse) GetDocument() (*goquery.Document, error) {
+func (r *bufferedResponse) GetDocument() (*goquery.Document, error) {
 	return goquery.NewDocumentFromReader(r.NewBuffer())
 }
 
-func Build_login_params(client_id int, scope *[]string) map[string]string {
+// BuildLoginParams returns a map with data for initial login page
+func BuildLoginParams(client_id int, scope *[]string) map[string]string {
 	return map[string]string{
 		"display":       "mobile",
 		"redirect_uri":  "https://oauth.vk.com/blank.html",
@@ -62,9 +66,10 @@ func Build_login_params(client_id int, scope *[]string) map[string]string {
 	}
 }
 
+// BuildLoginUrl returns an url for initial login page
 func BuildLoginUrl(client_id int, scope *[]string) string {
-	params := Build_login_params(client_id, scope)
-	login_url, err := url.Parse(Login_url)
+	params := BuildLoginParams(client_id, scope)
+	login_url, err := url.Parse(login_url)
 	if err != nil {
 		return err.Error()
 	}
@@ -89,7 +94,8 @@ func hide_password(query map[string]string) map[string]string {
 	return new_query
 }
 
-func process_form(form *goquery.Selection, query map[string]string, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
+// process_form just POST a given form with all data
+func process_form(form *goquery.Selection, query map[string]string, session *grequests.Session, last_response *bufferedResponse) (*bufferedResponse, error) {
 	action, _ := form.Attr("action")
 	if strings.HasPrefix(action, "/") {
 		url := last_response.Response.RawResponse.Request.URL
@@ -115,10 +121,11 @@ func process_form(form *goquery.Selection, query map[string]string, session *gre
 	if err != nil {
 		return nil, err
 	}
-	return CreateBufferedResponse(response)
+	return createBufferedResponse(response)
 }
 
-func auth_user(login, password string, doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
+// auth_user fills users login and password in form and executes it.
+func auth_user(login, password string, doc *goquery.Document, session *grequests.Session, last_response *bufferedResponse) (*bufferedResponse, error) {
 	auth_user_logger := AuthLogger.WithFields(logrus.Fields{
 		"login": login,
 	})
@@ -141,7 +148,8 @@ func auth_user(login, password string, doc *goquery.Document, session *grequests
 	return buffered_response, nil
 }
 
-func process_two_factor_auth(auth_code string, doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
+// process_two_factor_auth passes two-factor auth with auth_code
+func process_two_factor_auth(auth_code string, doc *goquery.Document, session *grequests.Session, last_response *bufferedResponse) (*bufferedResponse, error) {
 	logger := AuthLogger.WithField("auth_code", auth_code)
 	form := doc.Find("form")
 	buffered_response, err := process_form(form, map[string]string{"code": auth_code}, session, last_response)
@@ -157,11 +165,14 @@ func process_two_factor_auth(auth_code string, doc *goquery.Document, session *g
 	return buffered_response, nil
 }
 
-func give_access(doc *goquery.Document, session *grequests.Session, last_response *BufferedResponse) (*BufferedResponse, error) {
+// give_access confirmes requested permissions
+func give_access(doc *goquery.Document, session *grequests.Session, last_response *bufferedResponse) (*bufferedResponse, error) {
 	form := doc.Find("form")
 	return process_form(form, nil, session, last_response)
 }
 
+// Authenticate user by login and password, optionally passing two-factor auth with auth_code (if it is not enabled
+// on account, pass "" in auth_code. Return AuthInfo structure. And error, of course.
 func Authenticate(login, password string, client_id int, scope *[]string, auth_code string) (*AuthInfo, error) {
 	AuthLogger.WithFields(logrus.Fields{
 		"login":     login,
@@ -172,15 +183,15 @@ func Authenticate(login, password string, client_id int, scope *[]string, auth_c
 	session := grequests.NewSession(nil)
 
 	//Get initial login page
-	login_params := Build_login_params(client_id, scope)
+	login_params := BuildLoginParams(client_id, scope)
 
 	authentication_logger := AuthLogger.WithFields(logrus.Fields{
 		"login_params": login_params,
-		"login_url":    Login_url,
+		"login_url":    login_url,
 	})
 	authentication_logger.Infoln("Getting initial login page")
 
-	response, err := session.Get(Login_url, &grequests.RequestOptions{Params: login_params})
+	response, err := session.Get(login_url, &grequests.RequestOptions{Params: login_params})
 	if err != nil {
 		authentication_logger.Errorln("Error while getting initial login page")
 		return nil, err
@@ -194,7 +205,7 @@ func Authenticate(login, password string, client_id int, scope *[]string, auth_c
 		return nil, errors.New("Initial login page response status is not Ok")
 	}
 
-	buffered_response, err := CreateBufferedResponse(response)
+	buffered_response, err := createBufferedResponse(response)
 	if err != nil {
 		authentication_logger.Errorln("Error while creating buffered response from initial login page")
 		return nil, err
